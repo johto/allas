@@ -208,7 +208,7 @@ func (c *FrontendConnection) startup(dbcfg VirtualDatabaseConfiguration) bool {
 		if fbproto.IsStartupMessage(&message) {
 			break
 		} else if fbproto.IsSSLRequest(&message) {
-			err = message.Discard()
+			_, err = message.Force()
 			if err != nil {
 				elog.Logf("error while reading SSLRequest: %s", err)
 				return false
