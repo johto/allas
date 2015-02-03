@@ -22,7 +22,7 @@ Options:
 }
 
 func main() {
-	InitErrorLog(os.Stdout)
+	InitErrorLog(os.Stderr)
 
 	if len(os.Args) != 2 {
 		printUsage()
