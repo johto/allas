@@ -36,7 +36,7 @@ Here's an example configuration file:
         {
             "name": "allas",
             "auth": {
-                "method": "md5"
+                "method": "md5",
 				"user": "allas",
 				"password": "s3cret"
             }
