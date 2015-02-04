@@ -426,7 +426,7 @@ mainLoop:
 
 	_ = c.stream.Close()
 	// wait for queryProcessingMainLoop to finish
-	for range c.queryResultCh {
+	for _ = range c.queryResultCh {
 	}
 
 	// Done with this client.  Log the error if necessary.
