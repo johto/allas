@@ -439,4 +439,13 @@ mainLoop:
 	default:
 		elog.Logf("client %s disconnected: %s\n", c, c.err)
 	}
+
+	// finally, close all the channels the client was listening on
+	for channel := range c.listenChannels {
+		err := c.dispatcher.Unlisten(channel, c.notify)
+		if err != nil {
+			elog.Warningf("could not unlisten: %s\n", err)
+		}
+	}
+	c.listenChannels = nil
 }
