@@ -226,7 +226,7 @@ func (c *FrontendConnection) startup(dbcfg VirtualDatabaseConfiguration) bool {
 			_ = c.stream.Close()
 			return false
 		} else {
-			elog.Warningf("unrecognized message %#v", message)
+			elog.Warningf("unrecognized frontend message type 0x%x during startup", message.MsgType())
 			return false
 		}
 	}
@@ -354,7 +354,8 @@ sessionLoop:
 			break sessionLoop
 
 		default:
-			panic(fmt.Sprintf("oopsie daisies %+#v", message))
+			c.setSessionError(fmt.Errorf("unrecognized frontend message type 0x%x", message.MsgType()))
+			break sessionLoop
 		}
 	}
 
