@@ -78,6 +78,9 @@ func readListenSection(c *config, val interface{}) error {
 			err = readIntValue(&c.ListenPort, value, "listen.port")
 		case "host":
 			err = readTextValue(&c.ListenAddress, value, "listen.host")
+			if err == nil && c.ListenAddress == "*" {
+				c.ListenAddress = ""
+			}
 		default:
 			err = fmt.Errorf("unrecognized configuration option %q", "listen."+key)
 		}
