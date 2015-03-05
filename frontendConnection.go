@@ -249,6 +249,18 @@ func (c *FrontendConnection) startup(startupParameters map[string]string, dbcfg 
 		return false
 	}
 
+	for k, v := range startupParameters {
+		buf := &bytes.Buffer{}
+		fbbuf.WriteCString(buf, k)
+		fbbuf.WriteCString(buf, v)
+		message.InitFromBytes(fbproto.MsgParameterStatusS, buf.Bytes())
+		err = c.WriteMessage(&message)
+		if err != nil {
+			elog.Logf("error during startup sequence: %s", err)
+			return false
+		}
+	}
+
 	fbproto.InitReadyForQuery(&message, fbproto.RfqIdle)
 	err = c.WriteMessage(&message)
 	if err != nil {
