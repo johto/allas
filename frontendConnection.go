@@ -23,6 +23,12 @@ var (
 	errLostServerConnection = errors.New("lost server connection")
 )
 
+// QueryResult + Sync (yes/no)
+type queryResultSync struct {
+	Result QueryResult
+	Sync bool
+}
+
 type FrontendConnection struct {
 	// immutable
 	remoteAddr string
@@ -32,7 +38,7 @@ type FrontendConnection struct {
 
 	connStatusNotifier chan struct{}
 	notify             chan *pq.Notification
-	queryResultCh      chan QueryResult
+	queryResultCh      chan queryResultSync
 
 	// owned by queryProcessingMainLoop until queryResultCh has been closed
 	listenChannels map[string]struct{}
@@ -75,7 +81,7 @@ func NewFrontendConnection(c net.Conn, dispatcher *notifydispatcher.NotifyDispat
 
 		connStatusNotifier: connStatusNotifier,
 		notify:             make(chan *pq.Notification, 32),
-		queryResultCh:      make(chan QueryResult, 4),
+		queryResultCh:      make(chan queryResultSync, 8),
 
 		listenChannels: make(map[string]struct{}),
 	}
@@ -276,6 +282,17 @@ func (c *FrontendConnection) startup(startupParameters map[string]string, dbcfg 
 	return true
 }
 
+func (c *FrontendConnection) sendReadyForQuery() error {
+	var message fbcore.Message
+
+	fbproto.InitReadyForQuery(&message, fbproto.RfqIdle)
+	err := c.WriteMessage(&message)
+	if err != nil {
+		return err
+	}
+	return c.FlushStream()
+}
+
 func (c *FrontendConnection) WriteMessage(msg *fbcore.Message) error {
 	return c.stream.Send(msg)
 }
@@ -317,20 +334,115 @@ func (c *FrontendConnection) UnlistenAll() error {
 	return firstErr
 }
 
-// Non-nil return value means we should kill this client
-func (c *FrontendConnection) processQuery(query string) error {
-	q, err := ParseQuery(query)
+func (c *FrontendConnection) readParseMessage(msg *fbcore.Message) (queryString string, err error) {
+	statementName, err := fbbuf.ReadCString(msg.Payload())
 	if err != nil {
-		c.queryResultCh <- NewErrorResponse("42601", err.Error())
-		return nil
+		return "", err
 	}
+	if statementName != "" {
+		return "", fmt.Errorf("attempted to use statement name %q; only unnamed statements are supported")
+	}
+	queryString, err = fbbuf.ReadCString(msg.Payload())
+	if err != nil {
+		return "", err
+	}
+	numParamTypes, err := fbbuf.ReadInt16(msg.Payload())
+	if err != nil {
+		return "", err
+	}
+	if numParamTypes != 0 {
+		return "", fmt.Errorf("attempted to prepare a statement with %d param types", numParamTypes)
+	}
+	// TODO: ensure we're at the end of the packet
+	return queryString, nil
+}
 
-	result, err := q.Process(c)
+func (c *FrontendConnection) readExecuteMessage(msg *fbcore.Message) error {
+	statementName, err := fbbuf.ReadCString(msg.Payload())
 	if err != nil {
 		return err
 	}
-	c.queryResultCh <- result
+	if statementName != "" {
+		return fmt.Errorf("attempted to use statement name %q; only unnamed statements are supported")
+	}
+	// ignore maxRowCount
+	_, err = fbbuf.ReadInt32(msg.Payload())
+	// TODO: ensure we're at the end of the packet
+	return err
+}
+
+func (c *FrontendConnection) readDescribeMessage(msg *fbcore.Message) (byte, error) {
+	typ, err := fbbuf.ReadByte(msg.Payload())
+	if err != nil {
+		return 0, err
+	}
+	if typ != 'S' && typ != 'P' {
+		return 0, fmt.Errorf("invalid type %q", typ)
+	}
+	statementName, err := fbbuf.ReadCString(msg.Payload())
+	if err != nil {
+		return 0, err
+	}
+	if statementName != "" {
+		return 0, fmt.Errorf("tried to use statement/portal name %q; only unnamed statements and portals are supported")
+	}
+	// TODO: ensure we're at the end of the packet
+	return typ, nil
+}
+
+func (c *FrontendConnection) readBindMessage(msg *fbcore.Message) error {
+	portalName, err := fbbuf.ReadCString(msg.Payload())
+	if err != nil {
+		return err
+	}
+	if portalName != "" {
+		return fmt.Errorf("attempted to bind to a named portal %q; only the unnamed portal is supported")
+	}
+	statementName, err := fbbuf.ReadCString(msg.Payload())
+	if err != nil {
+		return err
+	}
+	if statementName != "" {
+		return fmt.Errorf("attempted to bind statement %q, even though it has not been parsed yet", statementName)
+	}
+	numParamFormats, err := fbbuf.ReadInt16(msg.Payload())
+	if err != nil {
+		return err
+	}
+	if numParamFormats != 0 {
+		return fmt.Errorf("the number of parameter formats (%d) does not match the number of parameters in the query (0)", numParamFormats)
+	}
+	numParameters, err := fbbuf.ReadInt16(msg.Payload())
+	if err != nil {
+		return err
+	}
+	if numParameters != 0 {
+		return fmt.Errorf("the number of parameters provided by the client (%d) does not match the number of parameters in the query (0)", numParameters)
+	}
+	// TODO: ensure we're at the end of the packet
 	return nil
+}
+
+func (c *FrontendConnection) discardUntilSync() error {
+	var message fbcore.Message
+
+	for {
+		err := c.stream.Next(&message)
+		if err != nil {
+			return err
+		}
+
+		switch message.MsgType() {
+		case fbproto.MsgSyncS:
+			_, err = message.Force()
+			return nil
+		default:
+			_, err = message.Force()
+		}
+		if err != nil {
+			return err
+		}
+	}
 }
 
 // This is the main loop for processing messages from the frontend.  Note that
@@ -338,6 +450,11 @@ func (c *FrontendConnection) processQuery(query string) error {
 // must go through queryResultCh.  We're also not responsible for doing any
 // cleanup in any case; that'll all be handled by mainLoop.
 func (c *FrontendConnection) queryProcessingMainLoop() {
+	var unnamedStatement FrontendQuery
+
+	var queryResult QueryResult
+	var sendReadyForQuery bool
+
 sessionLoop:
 	for {
 		var message fbcore.Message
@@ -348,18 +465,106 @@ sessionLoop:
 			break sessionLoop
 		}
 
+		queryResult = nil
+		sendReadyForQuery = false
+
 		switch message.MsgType() {
+		case fbproto.MsgParseP:
+			queryString, err := c.readParseMessage(&message)
+			if err != nil {
+				c.setSessionError(err)
+				break sessionLoop
+			}
+			unnamedStatement, err = ParseQuery(queryString)
+			if err != nil {
+				queryResult = NewErrorResponse("42601", err.Error())
+				c.queryResultCh <- queryResultSync{queryResult, false}
+
+				err = c.discardUntilSync()
+				if err != nil {
+					c.setSessionError(err)
+					break sessionLoop
+				}
+
+				queryResult = NewNopResponder()
+				sendReadyForQuery = true
+			} else {
+				queryResult = NewParseComplete()
+				sendReadyForQuery = false
+			}
+
+		case fbproto.MsgExecuteE:
+			err = c.readExecuteMessage(&message)
+			if unnamedStatement == nil {
+				err = fmt.Errorf("attempted to execute the unnamed prepared statement when one does not exist")
+				c.setSessionError(err)
+				break sessionLoop
+			}
+			queryResult, err = unnamedStatement.Process(c)
+			if err != nil {
+				c.setSessionError(err)
+				break sessionLoop
+			}
+			sendReadyForQuery = false
+			// Disallow reuse; not exactly following the protocol to the letter,
+			// but apps reusing the unnamed statement should not exist, either.
+			unnamedStatement = nil
+
+		case fbproto.MsgDescribeD:
+			_, err = c.readDescribeMessage(&message)
+			if err != nil {
+				c.setSessionError(err)
+				break sessionLoop
+			}
+			if unnamedStatement == nil {
+				err = fmt.Errorf("attempted to describe the unnamed prepared statement when one does not exist")
+				c.setSessionError(err)
+				break sessionLoop
+			}
+			queryResult = unnamedStatement.Describe()
+			sendReadyForQuery = false
+
+		case fbproto.MsgBindB:
+			err = c.readBindMessage(&message)
+			if err != nil {
+				c.setSessionError(err)
+				break sessionLoop
+			}
+			queryResult = NewBindComplete()
+			sendReadyForQuery = false
+
+		case fbproto.MsgSyncS:
+			queryResult = NewNopResponder()
+			sendReadyForQuery = true
+
 		case fbproto.MsgQueryQ:
 			query, err := fbproto.ReadQuery(&message)
 			if err != nil {
 				c.setSessionError(err)
 				break sessionLoop
 			}
-			err = c.processQuery(query.Query)
+			q, err := ParseQuery(query.Query)
 			if err != nil {
-				c.setSessionError(err)
-				break sessionLoop
+				queryResult = NewErrorResponse("42601", err.Error())
+			} else {
+				resultDescription := q.Describe()
+				// Special case in SimpleQuery processing: we only send the
+				// Describe() response over if it's a RowDescription.  This is
+				// somewhat magical and very weird, but that's what the upstream
+				// server does, so we ought to do the same thing here.
+				if DescriptionIsRowDescription(resultDescription) {
+					c.queryResultCh <- queryResultSync{resultDescription, false}
+				}
+				queryResult, err = q.Process(c)
+				if err != nil {
+					c.setSessionError(err)
+					break sessionLoop
+				}
 			}
+			sendReadyForQuery = true
+			// Simple Query also clears the unnamed statement; this matches
+			// what Postgres does.
+			unnamedStatement = nil
 
 		case fbproto.MsgTerminateX:
 			c.setSessionError(errGracefulTermination)
@@ -368,6 +573,10 @@ sessionLoop:
 		default:
 			c.setSessionError(fmt.Errorf("unrecognized frontend message type 0x%x", message.MsgType()))
 			break sessionLoop
+		}
+
+		if queryResult != nil {
+			c.queryResultCh <- queryResultSync{queryResult, sendReadyForQuery}
 		}
 	}
 
@@ -423,16 +632,23 @@ mainLoop:
 			c.fatal(errLostServerConnection)
 			break mainLoop
 
-		case res, ok := <-c.queryResultCh:
+		case resSync, ok := <-c.queryResultCh:
 			if !ok {
 				// queryProcessingMainLoop terminated, we're done
 				break mainLoop
 			}
 
-			err := res.Respond(c)
+			err := resSync.Result.Respond(c)
 			if err != nil {
 				c.setSessionError(err)
 				break mainLoop
+			}
+			if resSync.Sync {
+				err = c.sendReadyForQuery()
+				if err != nil {
+					c.setSessionError(err)
+					break mainLoop
+				}
 			}
 		}
 	}

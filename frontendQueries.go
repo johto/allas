@@ -22,11 +22,7 @@ func (qr commandComplete) Respond(f Frontend) error {
 	var message fbcore.Message
 
 	fbproto.InitCommandComplete(&message, string(qr))
-	err := f.WriteMessage(&message)
-	if err != nil {
-		return err
-	}
-	return sendReadyForQuery(f)
+	return f.WriteMessage(&message)
 }
 
 // emptyQueryResponse is an EmptyQueryResponse + ReadyForQuery.
@@ -36,11 +32,7 @@ func (eqr emptyQueryResponse) Respond(f Frontend) error {
 	var message fbcore.Message
 
 	message.InitFromBytes(fbproto.MsgEmptyQueryResponseI, nil)
-	err := f.WriteMessage(&message)
-	if err != nil {
-		return err
-	}
-	return sendReadyForQuery(f)
+	return f.WriteMessage(&message)
 }
 
 // errorResponse is an ErrorResponse + ReadyForQuery.  The representation is a
@@ -64,34 +56,60 @@ func (qr errorResponse) Respond(f Frontend) error {
 
 	message.InitFromBytes(fbproto.MsgErrorResponseE, buf.Bytes())
 
-	err := f.WriteMessage(&message)
-	if err != nil {
-		return err
-	}
-	return sendReadyForQuery(f)
+	return f.WriteMessage(&message)
 }
 
 func NewErrorResponse(sqlstate, errorMessage string) QueryResult {
 	return errorResponse{sqlstate, errorMessage}
 }
 
-// Helper functions for query results
+// Extended protocol messages.  These don't normally Flush the stream, since
+// that's handled by Sync/Flush messages specifically.
 
-func sendReadyForQuery(f Frontend) error {
+type parseComplete struct{}
+func (qr parseComplete) Respond(f Frontend) error {
 	var message fbcore.Message
+	message.InitFromBytes(fbproto.MsgParseComplete1, []byte{})
+	return f.WriteMessage(&message)
+}
+func NewParseComplete() QueryResult {
+	return parseComplete{}
+}
 
-	fbproto.InitReadyForQuery(&message, fbproto.RfqIdle)
-	err := f.WriteMessage(&message)
-	if err != nil {
-		return err
-	}
-	return f.FlushStream()
+type bindComplete struct{}
+func (qr bindComplete) Respond(f Frontend) error {
+	var message fbcore.Message
+	message.InitFromBytes(fbproto.MsgBindComplete2, []byte{})
+	return f.WriteMessage(&message)
+}
+func NewBindComplete() QueryResult {
+	return bindComplete{}
+}
+
+type noData struct{}
+func (qr noData) Respond(f Frontend) error {
+	var message fbcore.Message
+	message.InitFromBytes(fbproto.MsgNoDataN, []byte{})
+	return f.WriteMessage(&message)
+}
+func NewNoData() QueryResult {
+	return noData{}
+}
+
+// Used in response to a Sync
+type nopResponder struct{}
+func (qr nopResponder) Respond(f Frontend) error {
+	return nil
+}
+func NewNopResponder() QueryResult {
+	return nopResponder{}
 }
 
 // Different query types below
 
 type FrontendQuery interface {
 	Process(fe Frontend) (QueryResult, error)
+	Describe() QueryResult
 }
 
 type listenRequest struct {
@@ -106,6 +124,10 @@ func (q listenRequest) Process(fe Frontend) (QueryResult, error) {
 		return nil, err
 	}
 	return commandComplete("LISTEN"), nil
+}
+
+func (q listenRequest) Describe() QueryResult {
+	return NewNoData()
 }
 
 func NewListenRequest(channel string) FrontendQuery {
@@ -132,6 +154,10 @@ func (q unlistenRequest) Process(fe Frontend) (QueryResult, error) {
 	return commandComplete("UNLISTEN"), nil
 }
 
+func (q unlistenRequest) Describe() QueryResult {
+	return NewNoData()
+}
+
 func NewUnlistenRequest(channel string) FrontendQuery {
 	return unlistenRequest{channel, false}
 }
@@ -147,14 +173,26 @@ func (q emptyQuery) Process(fe Frontend) (QueryResult, error) {
 	return emptyQueryResponse{}, nil
 }
 
+func (q emptyQuery) Describe() QueryResult {
+	return NewNoData()
+}
+
 func NewEmptyQuery() FrontendQuery {
 	return emptyQuery{}
 }
 
-type trivialSelectResult struct {
+
+// Returns true if the passed-in description (i.e. result of
+// FrontendQuery.Describe) is a RowDescription.  See
+// FrontendConnection.queryProcessingMainLoop.
+func DescriptionIsRowDescription(d QueryResult) bool {
+	_, ok := d.(trivialSelectResultDescription)
+	return ok
 }
 
-func (r trivialSelectResult) Respond(f Frontend) error {
+type trivialSelectResultDescription struct{}
+
+func (d trivialSelectResultDescription) Respond(f Frontend) error {
 	var msg fbcore.Message
 
 	tupleDesc := fbproto.FieldDescription{
@@ -167,21 +205,23 @@ func (r trivialSelectResult) Respond(f Frontend) error {
 		Format:     0,
 	}
 	fbproto.InitRowDescription(&msg, []fbproto.FieldDescription{tupleDesc})
-	err := f.WriteMessage(&msg)
-	if err != nil {
-		return err
-	}
+	return f.WriteMessage(&msg)
+}
+
+type trivialSelectResult struct {}
+
+func (r trivialSelectResult) Respond(f Frontend) error {
+	var msg fbcore.Message
 
 	buf := &bytes.Buffer{}
 	fbbuf.WriteInt16(buf, 1)
 	fbbuf.WriteInt32(buf, 1)
 	buf.WriteByte('1')
 	msg.InitFromBytes(fbproto.MsgDataRowD, buf.Bytes())
-	err = f.WriteMessage(&msg)
+	err := f.WriteMessage(&msg)
 	if err != nil {
 		return err
 	}
-
 	return commandComplete("SELECT").Respond(f)
 }
 
@@ -190,6 +230,10 @@ type trivialSelect struct {
 
 func (q trivialSelect) Process(fe Frontend) (QueryResult, error) {
 	return trivialSelectResult{}, nil
+}
+
+func (q trivialSelect) Describe() QueryResult {
+	return trivialSelectResultDescription{}
 }
 
 func NewTrivialSelect() FrontendQuery {
