@@ -105,6 +105,6 @@ func main() {
 		m.Unlock()
 
 		newConn := NewFrontendConnection(c, nd, myConnStatusNotifier)
-		go newConn.mainLoop(Config.Databases)
+		go newConn.mainLoop(Config.StartupParameters, Config.Databases)
 	}
 }

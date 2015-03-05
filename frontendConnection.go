@@ -195,7 +195,7 @@ func (c *FrontendConnection) auth(dbcfg VirtualDatabaseConfiguration, sm *fbprot
 	return true
 }
 
-func (c *FrontendConnection) startup(dbcfg VirtualDatabaseConfiguration) bool {
+func (c *FrontendConnection) startup(startupParameters map[string]string, dbcfg VirtualDatabaseConfiguration) bool {
 	var message fbcore.Message
 	var err error
 
@@ -387,8 +387,8 @@ func (c *FrontendConnection) setSessionError(err error) {
 	c.lock.Unlock()
 }
 
-func (c *FrontendConnection) mainLoop(dbcfg VirtualDatabaseConfiguration) {
-	if !c.startup(dbcfg) {
+func (c *FrontendConnection) mainLoop(startupParameters map[string]string, dbcfg VirtualDatabaseConfiguration) {
+	if !c.startup(startupParameters, dbcfg) {
 		return
 	}
 

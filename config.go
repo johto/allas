@@ -14,6 +14,7 @@ type config struct {
 
 	ClientConnInfo string
 
+	StartupParameters map[string]string
 	Databases VirtualDatabaseConfiguration
 }
 
@@ -25,6 +26,7 @@ var Config = config{
 
 	ClientConnInfo: "host=localhost port=5432 sslmode=disable",
 
+	StartupParameters: nil,
 	Databases: nil,
 }
 
@@ -97,6 +99,22 @@ func readConnectSection(c *config, val interface{}) error {
 		return fmt.Errorf(`section "connect" must be a connection string`)
 	}
 	c.ClientConnInfo = data
+	return nil
+}
+
+func readStartupParameterSection(c *config, val interface{}) error {
+	data, ok := val.(map[string]interface{})
+	if !ok {
+		return fmt.Errorf(`section "startup_parameters" must be a set of key-value pairs`)
+	}
+	c.StartupParameters = make(map[string]string)
+	for k, v := range data {
+		vs, ok := v.(string)
+		if !ok {
+			return fmt.Errorf(`all startup parameters must be strings`)
+		}
+		c.StartupParameters[k] = vs
+	}
 	return nil
 }
 
@@ -203,6 +221,8 @@ func readConfigFile(filename string) error {
 			err = readListenSection(&Config, value)
 		case "connect":
 			err = readConnectSection(&Config, value)
+		case "startup_parameters":
+			err = readStartupParameterSection(&Config, value)
 		case "databases":
 			err = readDatabaseSection(&Config, value)
 		default:

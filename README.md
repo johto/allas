@@ -32,6 +32,9 @@ Here's an example configuration file:
         "host": "localhost"
     },
     "connect": "host=localhost port=5432 sslmode=disable",
+    "startup_parameters": {
+        "server_version": "9.1.15"
+    },
     "databases": [
         {
             "name": "allas",
