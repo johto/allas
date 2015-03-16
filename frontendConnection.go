@@ -9,6 +9,7 @@ import (
 	"github.com/lib/pq"
 
 	"bytes"
+	"bufio"
 	"crypto/rand"
 	"errors"
 	"fmt"
@@ -27,6 +28,29 @@ var (
 type queryResultSync struct {
 	Result QueryResult
 	Sync bool
+}
+
+type frontendConnectionIO struct {
+	// Reader reads directly from the wrapped Conn
+	io.Reader
+
+	// Writing is buffered to avoid superfluous system calls
+	io.Writer
+
+	c net.Conn
+	bufw *bufio.Writer
+}
+func (fcio *frontendConnectionIO) Read(p []byte) (n int, err error) {
+	return fcio.c.Read(p)
+}
+func (fcio *frontendConnectionIO) Write(p []byte) (n int, err error) {
+	return fcio.bufw.Write(p)
+}
+func (fcio *frontendConnectionIO) Flush() error {
+	return fcio.bufw.Flush()
+}
+func (fcio *frontendConnectionIO) Close() error {
+	return fcio.c.Close()
 }
 
 type FrontendConnection struct {
@@ -73,10 +97,15 @@ func (c FrontendConnection) String() string {
 }
 
 func NewFrontendConnection(c net.Conn, dispatcher *notifydispatcher.NotifyDispatcher, connStatusNotifier chan struct{}) *FrontendConnection {
+	io := &frontendConnectionIO{
+		c: c,
+		bufw: bufio.NewWriter(c),
+	}
+
 	fc := &FrontendConnection{
 		remoteAddr: c.RemoteAddr().String(),
 
-		stream:     fbcore.NewFrontendStream(c),
+		stream:     fbcore.NewFrontendStream(io),
 		dispatcher: dispatcher,
 
 		connStatusNotifier: connStatusNotifier,
@@ -224,7 +253,7 @@ func (c *FrontendConnection) startup(startupParameters map[string]string, dbcfg 
 				elog.Logf("error during startup sequence: %s", err)
 				return false
 			}
-			err = c.stream.Flush()
+			err = c.FlushStream()
 			if err != nil {
 				elog.Logf("error during startup sequence: %s", err)
 			}
@@ -593,11 +622,7 @@ func (c *FrontendConnection) sendNotification(n *pq.Notification) error {
 	fbbuf.WriteCString(buf, n.Extra)
 	message.InitFromBytes(fbproto.MsgNotificationResponseA, buf.Bytes())
 
-	err := c.stream.Send(&message)
-	if err != nil {
-		return err
-	}
-	return c.stream.Flush()
+	return c.WriteAndFlush(&message)
 }
 
 func (c *FrontendConnection) setSessionError(err error) {
