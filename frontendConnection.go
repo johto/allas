@@ -99,7 +99,7 @@ func (c FrontendConnection) String() string {
 func NewFrontendConnection(c net.Conn, dispatcher *notifydispatcher.NotifyDispatcher, connStatusNotifier chan struct{}) *FrontendConnection {
 	io := &frontendConnectionIO{
 		c: c,
-		bufw: bufio.NewWriter(c),
+		bufw: bufio.NewWriterSize(c, 128),
 	}
 
 	fc := &FrontendConnection{
