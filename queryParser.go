@@ -75,6 +75,11 @@ func ParseQuery(rawinput string) (q FrontendQuery, err error) {
 		return nil, errQueryTooLong
 	}
 
+	// hack for JDBC versions 9.1 through 9.3
+	if rawinput == "SET extra_float_digits = 3" {
+		return NewNopSetCommand(), nil
+	}
+
 	input := []rune(rawinput)
 	input, err = nextToken(input, &token, flagAllowEOF)
 	if err != nil {

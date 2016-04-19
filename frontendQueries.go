@@ -239,3 +239,18 @@ func (q trivialSelect) Describe() QueryResult {
 func NewTrivialSelect() FrontendQuery {
 	return trivialSelect{}
 }
+
+type nopSetCommand struct {
+}
+
+func (q nopSetCommand) Process(fe Frontend) (QueryResult, error) {
+	return commandComplete("SET"), nil
+}
+
+func (q nopSetCommand) Describe() QueryResult {
+	return NewNoData()
+}
+
+func NewNopSetCommand() FrontendQuery {
+	return nopSetCommand{}
+}
