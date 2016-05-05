@@ -9,8 +9,7 @@ import (
 )
 
 type config struct {
-	ListenPort    int
-	ListenAddress string
+	Listen ListenConfig
 
 	ClientConnInfo string
 
@@ -21,8 +20,7 @@ type config struct {
 var Config = config{
 	// These are the defaults
 
-	ListenPort:    6433,
-	ListenAddress: "localhost",
+	Listen:	ListenConfig{6433, "localhost"},
 
 	ClientConnInfo: "host=localhost port=5432 sslmode=disable",
 
@@ -67,24 +65,21 @@ func readTextValue(dst *string, val interface{}, option string) error {
 	return nil
 }
 
-func readListenSection(c *config, val interface{}) error {
+func readListenSection(c *ListenConfig, val interface{}, option string) error {
 	data, ok := val.(map[string]interface{})
 	if !ok {
-		return fmt.Errorf(`section "listen" must be a JSON object`)
+		return fmt.Errorf(`section %q must be a JSON object`, option)
 	}
 	for key, value := range data {
 		var err error
 
 		switch key {
 		case "port":
-			err = readIntValue(&c.ListenPort, value, "listen.port")
+			err = readIntValue(&c.Port, value, option + ".port")
 		case "host":
-			err = readTextValue(&c.ListenAddress, value, "listen.host")
-			if err == nil && c.ListenAddress == "*" {
-				c.ListenAddress = ""
-			}
+			err = readTextValue(&c.Host, value, option + ".host")
 		default:
-			err = fmt.Errorf("unrecognized configuration option %q", "listen."+key)
+			err = fmt.Errorf("unrecognized configuration option %q", option+"."+key)
 		}
 		if err != nil {
 			return err
@@ -218,7 +213,7 @@ func readConfigFile(filename string) error {
 
 		switch key {
 		case "listen":
-			err = readListenSection(&Config, value)
+			err = readListenSection(&Config.Listen, value, "listen")
 		case "connect":
 			err = readConnectSection(&Config, value)
 		case "startup_parameters":

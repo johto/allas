@@ -5,9 +5,7 @@ import (
 	"github.com/lib/pq"
 
 	"fmt"
-	"net"
 	"os"
-	"strconv"
 	"sync"
 	"time"
 )
@@ -40,12 +38,7 @@ func main() {
 		elog.Fatalf("at least one database must be configured")
 	}
 
-	listenAddr := net.JoinHostPort(Config.ListenAddress, strconv.Itoa(Config.ListenPort))
-	tcpAddr, err := net.ResolveTCPAddr("tcp", listenAddr)
-	if err != nil {
-		elog.Fatalf("could not resolve listen address: %s", err)
-	}
-	l, err := net.ListenTCP("tcp", tcpAddr)
+	l, err := Config.Listen.Listen()
 	if err != nil {
 		elog.Fatalf("could not open listen socket: %s", err)
 	}

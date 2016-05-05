@@ -1,15 +1,20 @@
 {
-	"listen": {
-		"port": 6433,
-		"host": "localhost"
-	},
-	"connect": "host=localhost port=5432 sslmode=disable",
-	"databases": [
-		{
-			"name": "allas",
-			"auth": {
-				"method": "trust"
-			}
-		}
-	]
+    "listen": {
+        "port": 6433,
+        "host": "localhost"
+    },
+    "connect": "host=localhost port=5432 sslmode=disable",
+    "startup_parameters": {
+        "server_version": "9.1.15"
+    },
+    "databases": [
+        {
+            "name": "allas",
+            "auth": {
+                "method": "md5",
+                "user": "allas",
+                "password": "s3cret"
+            }
+        }
+    ]
 }
