@@ -24,7 +24,7 @@ Configuration
 The configuration file uses a JSON format and is organized into sections.  The
 top level structure is a JSON object, with the following keys ("sections"):
 
-#### listen
+###### listen
 
 `listen` specifies how `allas` listens to new connections.  It has three possible options:
 
@@ -34,26 +34,26 @@ top level structure is a JSON object, with the following keys ("sections"):
   UNIX domain socket.
   3. **keepalive** (boolean) specifies whether TCP keepalives should be enabled or not.
 
-#### connect
+###### connect
 
 `connect` is a [pq](http://godoc.org/github.com/lib/pq) connection string.  It
 supports many of libpq's options.
 
-#### startup\_parameters
+###### startup\_parameters
 
 `startup_parameters` is a JSON object specifying the list of "startup
 parameters" (such as the server's version number) to send to each client when
 they connect.
 
-#### databases
+###### databases
 
 `databases` is an array of JSON objects with the following keys:
 
   1. **name** (string) specifies the name of the database.
-  2. **auth** (JSON object) is described in the section `Database
+  2. **auth** (object) is described in the section `Database
   authentication`, below.
 
-###### Database authentication
+#### Database authentication
 
 The `auth` key of a database configuration section is a JSON object with a
 combination of the following keys:
