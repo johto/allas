@@ -33,7 +33,7 @@ Here's an example configuration file:
     },
     "connect": "host=localhost port=5432 sslmode=disable",
     "startup_parameters": {
-        "server_version": "9.1.15"
+        "server_version": "9.1.21"
     },
     "databases": [
         {
