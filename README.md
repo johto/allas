@@ -30,7 +30,7 @@ top level structure is a JSON object, with the following keys ("sections"):
 
   1. **port** (integer) specifies the port to listen on.
   2. **host** (string) specifies the address to listen on.  The asterisk
-  (`"\*"`) can be used to listen on all TCP interfaces, or an absolute path can
+  (`"*"`) can be used to listen on all TCP interfaces, or an absolute path can
   be used to listen on a UNIX domain socket.
   3. **keepalive** (boolean) specifies whether TCP keepalives should be enabled or not.
 
