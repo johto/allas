@@ -20,7 +20,7 @@ type config struct {
 var Config = config{
 	// These are the defaults
 
-	Listen:	ListenConfig{6433, "localhost"},
+	Listen:	ListenConfig{6433, "localhost", true},
 
 	ClientConnInfo: "host=localhost port=5432 sslmode=disable",
 
@@ -65,6 +65,22 @@ func readTextValue(dst *string, val interface{}, option string) error {
 	return nil
 }
 
+func readBooleanValue(dst *bool, val interface{}, option string) error {
+	var err error
+
+	switch val := val.(type) {
+	case bool:
+		*dst = val
+		err = nil
+	default:
+		err = fmt.Errorf("input must be a boolean")
+	}
+	if err != nil {
+		return fmt.Errorf("invalid value for option %q: %s", option, err.Error())
+	}
+	return nil
+}
+
 func readListenSection(c *ListenConfig, val interface{}, option string) error {
 	data, ok := val.(map[string]interface{})
 	if !ok {
@@ -78,6 +94,8 @@ func readListenSection(c *ListenConfig, val interface{}, option string) error {
 			err = readIntValue(&c.Port, value, option + ".port")
 		case "host":
 			err = readTextValue(&c.Host, value, option + ".host")
+		case "keepalive":
+			err = readBooleanValue(&c.KeepAlive, value, option + ".keepalive")
 		default:
 			err = fmt.Errorf("unrecognized configuration option %q", option+"."+key)
 		}

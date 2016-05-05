@@ -85,6 +85,8 @@ func main() {
 			panic(err)
 		}
 
+		Config.Listen.MaybeEnableKeepAlive(c)
+
 		var myConnStatusNotifier chan struct{}
 
 		m.Lock()

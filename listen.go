@@ -10,6 +10,8 @@ import (
 type ListenConfig struct {
 	Port int
 	Host string
+
+	KeepAlive bool
 }
 
 func (lc ListenConfig) Listen() (net.Listener, error) {
@@ -50,4 +52,14 @@ func (lc ListenConfig) Listen() (net.Listener, error) {
 		}
 	}
 	return listener, nil
+}
+
+func (lc ListenConfig) MaybeEnableKeepAlive(c net.Conn) {
+	// Try and keepalives if they were asked for
+	if lc.KeepAlive {
+		tcpConn, ok := c.(*net.TCPConn)
+		if ok {
+			_ = tcpConn.SetKeepAlive(true)
+		}
+	}
 }
