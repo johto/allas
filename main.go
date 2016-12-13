@@ -5,10 +5,84 @@ import (
 	"github.com/lib/pq"
 
 	"fmt"
+	"github.com/prometheus/client_golang/prometheus"
 	"os"
 	"sync"
 	"time"
 )
+
+// Implements a wrapper for pq.Listener for use between the PostgreSQL server
+// and NotifyDispatcher.  Here we collect some statistics and pass the
+// notifications on to the dispatcher.
+type pqListenerWrapper struct {
+	l *pq.Listener
+	ch chan *pq.Notification
+
+	inputChannelSaturationRatio *prometheus.Desc
+	dispatcherChannelSaturationRatio *prometheus.Desc
+}
+
+func newPqListenerWrapper(l *pq.Listener) (*pqListenerWrapper, error) {
+	w := &pqListenerWrapper{
+		l: l,
+		ch: make(chan *pq.Notification, 4),
+	}
+
+	w.inputChannelSaturationRatio = prometheus.NewDesc(
+		"prometheus_input_channel_saturation_ratio",
+		"main notification input Go channel saturation",
+		nil,
+		nil,
+	)
+	w.dispatcherChannelSaturationRatio = prometheus.NewDesc(
+		"prometheus_dispatcher_channel_saturation_ratio",
+		"dispatcher notification Go channel saturation",
+		nil,
+		nil,
+	)
+
+	err := Config.Prometheus.RegisterMetricsCollector(w)
+	if err != nil {
+		return nil, err
+	}
+	go w.workerGoroutine()
+	return w, nil
+}
+
+func (w *pqListenerWrapper) Describe(ch chan<- *prometheus.Desc) {
+	ch <- w.inputChannelSaturationRatio
+	ch <- w.dispatcherChannelSaturationRatio
+}
+
+func (w *pqListenerWrapper) Collect(ch chan<- prometheus.Metric) {
+	inputChSaturation := float64(len(w.l.Notify)) / float64(cap(w.l.Notify))
+	ch <- prometheus.MustNewConstMetric(w.inputChannelSaturationRatio, prometheus.GaugeValue, inputChSaturation)
+	dispatcherChSaturation := float64(len(w.ch)) / float64(cap(w.ch))
+	ch <- prometheus.MustNewConstMetric(w.dispatcherChannelSaturationRatio, prometheus.GaugeValue, dispatcherChSaturation)
+
+}
+
+func (w *pqListenerWrapper) workerGoroutine() {
+	input := w.l.NotificationChannel()
+	for {
+		m := <-input
+		time.Sleep(time.Minute)
+		MetricNotificationsReceived.Inc()
+		w.ch <- m
+	}
+}
+
+func (w *pqListenerWrapper) Listen(channel string) error {
+	return w.l.Listen(channel)
+}
+
+func (w *pqListenerWrapper) Unlisten(channel string) error {
+	return w.l.Listen(channel)
+}
+
+func (w *pqListenerWrapper) NotificationChannel() <-chan *pq.Notification {
+	return w.ch
+}
 
 func printUsage() {
     fmt.Fprintf(os.Stderr, `Usage:
@@ -43,6 +117,11 @@ func main() {
 		elog.Fatalf("could not open listen socket: %s", err)
 	}
 
+	err = Config.Prometheus.Setup()
+	if err != nil {
+		elog.Fatalf("Prometheus exporter setup failed: %s", err)
+	}
+
 	var m sync.Mutex
 	var connStatusNotifier chan struct{}
 
@@ -71,11 +150,16 @@ func main() {
 	os.Clearenv()
 
 	clientConnectionString := fmt.Sprintf("fallback_application_name=allas %s", Config.ClientConnInfo)
-	listener := pq.NewListener(clientConnectionString,
+	listener := pq.NewListener(
+		clientConnectionString,
 		250*time.Millisecond, 3*time.Second,
-		listenerStateChange)
-
-	nd := notifydispatcher.NewNotifyDispatcher(listener)
+		listenerStateChange,
+	)
+	listenerWrapper, err := newPqListenerWrapper(listener)
+	if err != nil {
+		elog.Fatalf("%s", err)
+	}
+	nd := notifydispatcher.NewNotifyDispatcher(listenerWrapper)
 	nd.SetBroadcastOnConnectionLoss(false)
 	nd.SetSlowReaderEliminationStrategy(notifydispatcher.NeglectSlowReaders)
 

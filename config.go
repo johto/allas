@@ -15,6 +15,8 @@ type config struct {
 
 	StartupParameters map[string]string
 	Databases VirtualDatabaseConfiguration
+
+	Prometheus PrometheusConfig
 }
 
 var Config = config{
@@ -26,6 +28,11 @@ var Config = config{
 
 	StartupParameters: nil,
 	Databases: nil,
+
+	Prometheus: PrometheusConfig{
+		Enabled: false,
+		Listen: ListenConfig{},
+	},
 }
 
 func readIntValue(dst *int, val interface{}, option string) error {
@@ -207,6 +214,29 @@ func readDatabaseSection(c *config, val interface{}) error {
 	return nil
 }
 
+func readPrometheusSection(c *config, val interface{}) error {
+	data, ok := val.(map[string]interface{})
+	if !ok {
+		return fmt.Errorf(`section "prometheus" must be a JSON object`)
+	}
+	for key, value := range data {
+		var err error
+
+		switch key {
+		case "listen":
+			err = readListenSection(&c.Prometheus.Listen, value, "prometheus.listen")
+			c.Prometheus.Enabled = true
+		default:
+			err = fmt.Errorf("unrecognized configuration option %q", "prometheus." + key)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+
 func readConfigFile(filename string) error {
 	var ci interface{}
 
@@ -238,6 +268,8 @@ func readConfigFile(filename string) error {
 			err = readStartupParameterSection(&Config, value)
 		case "databases":
 			err = readDatabaseSection(&Config, value)
+		case "prometheus":
+			err = readPrometheusSection(&Config, value)
 		default:
 			err = fmt.Errorf("unrecognized configuration section %q", key)
 		}

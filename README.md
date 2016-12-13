@@ -81,6 +81,12 @@ Here's an example configuration file:
     "startup_parameters": {
         "server_version": "9.1.24"
     },
+    "prometheus": {
+        "listen": {
+            "port": 9226,
+            "host": "*"
+        }
+    },
     "databases": [
         {
             "name": "allas",
