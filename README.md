@@ -45,6 +45,14 @@ supports many of libpq's options.
 parameters" (such as the server's version number) to send to each client when
 they connect.
 
+###### prometheus
+
+`prometheus` is a JSON object with the following keys:
+
+  1. **listen** (object) specifies how `allas` listens to connections from the
+  Prometheus scraping process.  The keys are the same as used by the main
+  `listen` section, documented above.
+
 ###### databases
 
 `databases` is an array of JSON objects with the following keys:
