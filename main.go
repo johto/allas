@@ -66,7 +66,6 @@ func (w *pqListenerWrapper) workerGoroutine() {
 	input := w.l.NotificationChannel()
 	for {
 		m := <-input
-		time.Sleep(time.Minute)
 		MetricNotificationsReceived.Inc()
 		w.ch <- m
 	}
