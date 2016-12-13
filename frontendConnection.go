@@ -369,7 +369,7 @@ func (c *FrontendConnection) readParseMessage(msg *fbcore.Message) (queryString 
 		return "", err
 	}
 	if statementName != "" {
-		return "", fmt.Errorf("attempted to use statement name %q; only unnamed statements are supported")
+		return "", fmt.Errorf("attempted to use statement name %q; only unnamed statements are supported", statementName)
 	}
 	queryString, err = fbbuf.ReadCString(msg.Payload())
 	if err != nil {
@@ -392,7 +392,7 @@ func (c *FrontendConnection) readExecuteMessage(msg *fbcore.Message) error {
 		return err
 	}
 	if statementName != "" {
-		return fmt.Errorf("attempted to use statement name %q; only unnamed statements are supported")
+		return fmt.Errorf("attempted to use statement name %q; only unnamed statements are supported", statementName)
 	}
 	// ignore maxRowCount
 	_, err = fbbuf.ReadInt32(msg.Payload())
@@ -413,7 +413,7 @@ func (c *FrontendConnection) readDescribeMessage(msg *fbcore.Message) (byte, err
 		return 0, err
 	}
 	if statementName != "" {
-		return 0, fmt.Errorf("tried to use statement/portal name %q; only unnamed statements and portals are supported")
+		return 0, fmt.Errorf("tried to use statement/portal name %q; only unnamed statements and portals are supported", statementName)
 	}
 	// TODO: ensure we're at the end of the packet
 	return typ, nil
@@ -425,7 +425,7 @@ func (c *FrontendConnection) readBindMessage(msg *fbcore.Message) error {
 		return err
 	}
 	if portalName != "" {
-		return fmt.Errorf("attempted to bind to a named portal %q; only the unnamed portal is supported")
+		return fmt.Errorf("attempted to bind to a named portal %q; only the unnamed portal is supported", portalName)
 	}
 	statementName, err := fbbuf.ReadCString(msg.Payload())
 	if err != nil {
