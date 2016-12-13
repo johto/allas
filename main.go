@@ -72,7 +72,7 @@ func main() {
 
 	clientConnectionString := fmt.Sprintf("fallback_application_name=allas %s", Config.ClientConnInfo)
 	listener := pq.NewListener(clientConnectionString,
-		250*time.Millisecond, 15*time.Second,
+		250*time.Millisecond, 3*time.Second,
 		listenerStateChange)
 
 	nd := notifydispatcher.NewNotifyDispatcher(listener)
