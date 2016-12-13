@@ -29,13 +29,13 @@ func newPqListenerWrapper(l *pq.Listener) (*pqListenerWrapper, error) {
 	}
 
 	w.inputChannelSaturationRatio = prometheus.NewDesc(
-		"prometheus_input_channel_saturation_ratio",
+		"allas_input_channel_saturation_ratio",
 		"main notification input Go channel saturation",
 		nil,
 		nil,
 	)
 	w.dispatcherChannelSaturationRatio = prometheus.NewDesc(
-		"prometheus_dispatcher_channel_saturation_ratio",
+		"allas_dispatcher_channel_saturation_ratio",
 		"dispatcher notification Go channel saturation",
 		nil,
 		nil,

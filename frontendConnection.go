@@ -645,6 +645,7 @@ mainLoop:
 		select {
 		case n := <-c.notify:
 			if len(c.notify) >= cap(c.notify)-1 {
+				MetricSlowClientsTerminated.Inc()
 				c.fatal(errClientCouldNotKeepUp)
 				break mainLoop
 			}
@@ -653,6 +654,7 @@ mainLoop:
 				c.setSessionError(err)
 				break mainLoop
 			}
+			MetricNotificationsDispatched.Inc()
 		case _ = <-c.connStatusNotifier:
 			c.fatal(errLostServerConnection)
 			break mainLoop
