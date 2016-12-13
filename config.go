@@ -225,7 +225,6 @@ func readPrometheusSection(c *config, val interface{}) error {
 		switch key {
 		case "listen":
 			err = readListenSection(&c.Prometheus.Listen, value, "prometheus.listen")
-			c.Prometheus.Enabled = true
 		default:
 			err = fmt.Errorf("unrecognized configuration option %q", "prometheus." + key)
 		}
@@ -233,6 +232,7 @@ func readPrometheusSection(c *config, val interface{}) error {
 			return err
 		}
 	}
+	c.Prometheus.Enabled = true
 	return nil
 }
 
