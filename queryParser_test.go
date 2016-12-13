@@ -37,7 +37,7 @@ func TestQueryParser(t *testing.T) {
 		switch ts.outcome {
 		case "error":
 			if err == nil {
-				t.Errorf("test %d failed: err is nil; expected %s", ts.err)
+				t.Errorf("test %d failed: err is nil; expected %s", n, ts.err)
 			} else if err.Error() != ts.err {
 				t.Errorf("test %d failed: err %q != %q", n, err.Error(), ts.err)
 			}
