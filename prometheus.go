@@ -31,6 +31,7 @@ func (w elogWrapper) Println(v ...interface{}) {
 	elog.Warningf("Prometheus handler error: %s", fmt.Sprintln(v...))
 }
 
+var MetricClientConnections prometheus.Gauge
 var MetricNotificationsReceived prometheus.Counter
 var MetricNotificationsDispatched prometheus.Counter
 var MetricSlowClientsTerminated prometheus.Counter
@@ -46,6 +47,16 @@ func (cfg *PrometheusConfig) InitializeMetrics(r *prometheus.Registry) error {
 	)
 	cfg.startupTimeMetric = prometheus.MustNewConstMetric(cfg.startupTimeDesc, prometheus.GaugeValue, float64(time.Now().Unix()))
 	err = r.Register(cfg)
+	if err != nil {
+		return err
+	}
+
+	MetricClientConnections = prometheus.NewGauge(prometheus.GaugeOpts{
+		Namespace: "allas",
+		Name: "client_connections",
+		Help: "the number of clients currently connected to allas",
+	})
+	err = r.Register(MetricClientConnections)
 	if err != nil {
 		return err
 	}

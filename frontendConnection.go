@@ -634,6 +634,9 @@ func (c *FrontendConnection) setSessionError(err error) {
 }
 
 func (c *FrontendConnection) mainLoop(startupParameters map[string]string, dbcfg VirtualDatabaseConfiguration) {
+	MetricClientConnections.Inc()
+	defer MetricClientConnections.Dec()
+
 	if !c.startup(startupParameters, dbcfg) {
 		return
 	}
