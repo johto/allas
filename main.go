@@ -76,7 +76,7 @@ func (w *pqListenerWrapper) Listen(channel string) error {
 }
 
 func (w *pqListenerWrapper) Unlisten(channel string) error {
-	return w.l.Listen(channel)
+	return w.l.Unlisten(channel)
 }
 
 func (w *pqListenerWrapper) NotificationChannel() <-chan *pq.Notification {
