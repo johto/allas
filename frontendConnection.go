@@ -337,6 +337,7 @@ func (c *FrontendConnection) Listen(channel string) error {
 	if err != nil && err != notifydispatcher.ErrChannelAlreadyActive {
 		return err
 	}
+	MetricListensExecuted.Inc()
 	return nil
 }
 
@@ -347,6 +348,7 @@ func (c *FrontendConnection) Unlisten(channel string) error {
 	if err != nil && err != notifydispatcher.ErrChannelNotActive {
 		return err
 	}
+	MetricUnlistensExecuted.Inc()
 	return nil
 }
 
@@ -705,6 +707,7 @@ mainLoop:
 		if err != nil {
 			elog.Warningf("could not unlisten: %s\n", err)
 		}
+		MetricUnlistensExecuted.Inc()
 	}
 	c.listenChannels = nil
 }

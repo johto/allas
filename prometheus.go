@@ -34,6 +34,8 @@ func (w elogWrapper) Println(v ...interface{}) {
 var MetricClientConnections prometheus.Gauge
 var MetricNotificationsReceived prometheus.Counter
 var MetricNotificationsDispatched prometheus.Counter
+var MetricListensExecuted prometheus.Counter
+var MetricUnlistensExecuted prometheus.Counter
 var MetricSlowClientsTerminated prometheus.Counter
 
 func (cfg *PrometheusConfig) InitializeMetrics(r *prometheus.Registry) error {
@@ -77,6 +79,26 @@ func (cfg *PrometheusConfig) InitializeMetrics(r *prometheus.Registry) error {
 		Help: "how many notifications have been dispatched so far",
 	})
 	err = r.Register(MetricNotificationsDispatched)
+	if err != nil {
+		return err
+	}
+
+	MetricListensExecuted = prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace: "allas",
+		Name: "listens_executed_total",
+		Help: "how many LISTEN queries have been executed so far",
+	})
+	err = r.Register(MetricListensExecuted)
+	if err != nil {
+		return err
+	}
+
+	MetricUnlistensExecuted = prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace: "allas",
+		Name: "unlistens_executed_total",
+		Help: "how many UNLISTEN queries have been executed so far",
+	})
+	err = r.Register(MetricUnlistensExecuted)
 	if err != nil {
 		return err
 	}
