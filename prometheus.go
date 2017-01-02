@@ -5,8 +5,44 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"net/http"
+	"runtime"
 	"time"
 )
+
+type gcStatsCollector struct {
+	pauseTotalDesc *prometheus.Desc
+	numGCDesc *prometheus.Desc
+}
+
+func newGCStatsCollector() *gcStatsCollector {
+	return &gcStatsCollector{
+		pauseTotalDesc: prometheus.NewDesc(
+			"allas_gc_pause_seconds_total",
+			"how much total time has been spent in garbage collector pauses",
+			nil,
+			nil,
+		),
+		numGCDesc: prometheus.NewDesc(
+			"allas_gc_pauses_total",
+			"how many times the garbage collector has run",
+			nil,
+			nil,
+		),
+	}
+}
+
+func (c *gcStatsCollector) Describe(ch chan<- *prometheus.Desc) {
+	ch <- c.pauseTotalDesc
+	ch <- c.numGCDesc
+}
+
+func (c *gcStatsCollector) Collect(ch chan<- prometheus.Metric) {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+
+	ch <- prometheus.MustNewConstMetric(c.pauseTotalDesc, prometheus.CounterValue, float64(m.PauseTotalNs) / 1000000000.0)
+	ch <- prometheus.MustNewConstMetric(c.numGCDesc, prometheus.CounterValue, float64(m.NumGC))
+}
 
 type PrometheusConfig struct {
 	Enabled bool
@@ -15,6 +51,7 @@ type PrometheusConfig struct {
 	registry *prometheus.Registry
 	startupTimeDesc *prometheus.Desc
 	startupTimeMetric prometheus.Metric
+	gcStatsCollector *gcStatsCollector
 }
 
 func (c *PrometheusConfig) RegisterMetricsCollector(coll prometheus.Collector) error {
@@ -109,6 +146,12 @@ func (cfg *PrometheusConfig) InitializeMetrics(r *prometheus.Registry) error {
 		Help: "how many clients have been terminated because they could not keep up",
 	})
 	err = r.Register(MetricSlowClientsTerminated)
+	if err != nil {
+		return err
+	}
+
+	cfg.gcStatsCollector = newGCStatsCollector()
+	err = r.Register(cfg.gcStatsCollector)
 	if err != nil {
 		return err
 	}
