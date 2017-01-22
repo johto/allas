@@ -51,7 +51,9 @@ they connect.
 
   1. **listen** (object) specifies how `allas` listens to connections from the
   Prometheus scraping process.  The keys are the same as used by the main
-  `listen` section, documented above.
+  `listen` section, documented above.  The port 9226 has been allocated in the
+  [Prometheus wiki](https://github.com/prometheus/prometheus/wiki/Default-port-allocations)
+  for allas's use.
 
 ###### databases
 
