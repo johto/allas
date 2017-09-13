@@ -89,7 +89,8 @@ Here's an example configuration file:
     },
     "connect": "host=localhost port=5432 sslmode=disable",
     "startup_parameters": {
-        "server_version": "9.1.24"
+        "server_version": "9.1.24",
+        "client_encoding": "UTF8"
     },
     "prometheus": {
         "listen": {
