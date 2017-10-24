@@ -83,6 +83,14 @@ func (w *pqListenerWrapper) NotificationChannel() <-chan *pq.Notification {
 	return w.ch
 }
 
+// runs in its own goroutine
+func listenerPinger(listener *pq.Listener) {
+   for {
+	   time.Sleep(60 * time.Second)
+	   _ = listener.Ping()
+   }
+}
+
 func printUsage() {
     fmt.Fprintf(os.Stderr, `Usage:
   %s [--help] configfile
@@ -161,6 +169,10 @@ func main() {
 	nd := notifydispatcher.NewNotifyDispatcher(listenerWrapper)
 	nd.SetBroadcastOnConnectionLoss(false)
 	nd.SetSlowReaderEliminationStrategy(notifydispatcher.NeglectSlowReaders)
+
+	// We don't strictly speaking need to be pinging the server; this is a
+	// workaround for PostgreSQL BUG #14830.
+	go listenerPinger(listener)
 
 	for {
 		c, err := l.Accept()
