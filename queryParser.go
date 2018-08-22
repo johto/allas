@@ -75,9 +75,14 @@ func ParseQuery(rawinput string) (q FrontendQuery, err error) {
 		return nil, errQueryTooLong
 	}
 
-	// hack for JDBC versions 9.1 through 9.3
-	if rawinput == "SET extra_float_digits = 3" {
-		return NewNopSetCommand(), nil
+	// Hack for JDBC.  It would be better if we knew how to parse SET commands
+	// properly and had a configuration file setting for those we can safely
+	// ignore, but this'll have to do for now.
+	switch rawinput {
+		case "SET extra_float_digits = 3":
+			return NewNopSetCommand(), nil
+		case "SET application_name = 'PostgreSQL JDBC Driver'":
+			return NewNopSetCommand(), nil
 	}
 
 	input := []rune(rawinput)
