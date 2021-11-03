@@ -15,8 +15,8 @@ interested in.
 How to build
 ------------
 
-Having installed a reasonably modern version of Go, run: `go get
-github.com/johto/allas`.  This should produce a binary under `$GOPATH/bin`.
+Clone the repository, and run "go build" in the cloned directory.  This should
+produce a binary called "allas".
 
 Configuration
 -------------
