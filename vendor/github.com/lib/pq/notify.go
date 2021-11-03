@@ -232,8 +232,7 @@ func (l *ListenerConn) UnlistenAll() (bool, error) {
 // Ping the remote server to make sure it's alive.  Non-nil error means the
 // connection has failed and should be abandoned.
 func (l *ListenerConn) Ping() error {
-	// XXX Must be a non-empty query due to PostgreSQL BUG #14830.
-	sent, err := l.ExecSimpleQuery("SELECT 1")
+	sent, err := l.ExecSimpleQuery("")
 	if !sent {
 		return err
 	}
