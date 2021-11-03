@@ -1,4 +1,4 @@
-module main
+module allas
 
 go 1.17
 
