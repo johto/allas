@@ -109,7 +109,7 @@ func NewFrontendConnection(c net.Conn, dispatcher *notifydispatcher.NotifyDispat
 		dispatcher: dispatcher,
 
 		connStatusNotifier: connStatusNotifier,
-		notify:             make(chan *pq.Notification, 32),
+		notify:             make(chan *pq.Notification, 256),
 		queryResultCh:      make(chan queryResultSync, 8),
 
 		listenChannels: make(map[string]struct{}),
