@@ -132,47 +132,55 @@ func main() {
 	var m sync.Mutex
 	var connStatusNotifier chan struct{}
 
-	listenerStateChange := func(ev pq.ListenerEventType, err error) {
-		switch ev {
-		case pq.ListenerEventConnectionAttemptFailed:
-			elog.Warningf("Listener: could not connect to the database: %s", err.Error())
-
-		case pq.ListenerEventDisconnected:
-			elog.Warningf("Listener: lost connection to the database: %s", err.Error())
-			m.Lock()
-			close(connStatusNotifier)
-			connStatusNotifier = nil
-			m.Unlock()
-
-		case pq.ListenerEventReconnected,
-			pq.ListenerEventConnected:
-			elog.Logf("Listener: connected to the database")
-			m.Lock()
-			connStatusNotifier = make(chan struct{})
-			m.Unlock()
-		}
-	}
-
 	// make sure pq.Listener doesn't pick up any env variables
 	os.Clearenv()
 
-	clientConnectionString := fmt.Sprintf("fallback_application_name=allas %s", Config.ClientConnInfo)
-	listener := pq.NewListener(
-		clientConnectionString,
-		250*time.Millisecond, 3*time.Second,
-		listenerStateChange,
-	)
-	listenerWrapper, err := newPqListenerWrapper(listener)
-	if err != nil {
-		elog.Fatalf("%s", err)
-	}
-	nd := notifydispatcher.NewNotifyDispatcher(listenerWrapper)
-	nd.SetBroadcastOnConnectionLoss(false)
-	nd.SetSlowReaderEliminationStrategy(notifydispatcher.NeglectSlowReaders)
+	dispatchers := make(map[string]*notifydispatcher.NotifyDispatcher)
 
-	// We don't strictly speaking need to be pinging the server; this is a
-	// workaround for PostgreSQL BUG #14830.
-	go listenerPinger(listener)
+	for _, value := range Config.Databases {
+		dbname := value.name
+
+		listenerStateChange := func(ev pq.ListenerEventType, err error) {
+			switch ev {
+			case pq.ListenerEventConnectionAttemptFailed:
+				elog.Warningf("Listener: could not connect to database %s: %s", dbname, err.Error())
+
+			case pq.ListenerEventDisconnected:
+				elog.Warningf("Listener: lost connection to database %s: %s", dbname, err.Error())
+				m.Lock()
+				close(connStatusNotifier)
+				connStatusNotifier = nil
+				m.Unlock()
+
+			case pq.ListenerEventReconnected,
+				pq.ListenerEventConnected:
+				elog.Logf("Listener: connected to database %s", dbname)
+				m.Lock()
+				connStatusNotifier = make(chan struct{})
+				m.Unlock()
+			}
+		}
+
+		clientConnectionString := fmt.Sprintf("fallback_application_name=allas %s dbname=%s", Config.ClientConnInfo, dbname)
+		listener := pq.NewListener(
+			clientConnectionString,
+			250*time.Millisecond, 3*time.Second,
+			listenerStateChange,
+		)
+		listenerWrapper, err := newPqListenerWrapper(listener)
+		if err != nil {
+			elog.Fatalf("%s", err)
+		}
+		nd := notifydispatcher.NewNotifyDispatcher(listenerWrapper)
+		nd.SetBroadcastOnConnectionLoss(false)
+		nd.SetSlowReaderEliminationStrategy(notifydispatcher.NeglectSlowReaders)
+
+		dispatchers[value.name] = nd
+
+		// We don't strictly speaking need to be pinging the server; this is a
+		// workaround for PostgreSQL BUG #14830.
+		go listenerPinger(listener)
+	}
 
 	for {
 		c, err := l.Accept()
@@ -194,7 +202,7 @@ func main() {
 		}
 		m.Unlock()
 
-		newConn := NewFrontendConnection(c, nd, myConnStatusNotifier)
+		newConn := NewFrontendConnection(c, dispatchers, myConnStatusNotifier)
 		go newConn.mainLoop(Config.StartupParameters, Config.Databases)
 	}
 }

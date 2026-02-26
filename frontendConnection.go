@@ -8,8 +8,8 @@ import (
 	"github.com/johto/notifyutils/notifydispatcher"
 	"github.com/lib/pq"
 
-	"bytes"
 	"bufio"
+	"bytes"
 	"crypto/rand"
 	"errors"
 	"fmt"
@@ -59,6 +59,7 @@ type FrontendConnection struct {
 
 	stream     *fbcore.MessageStream
 	dispatcher *notifydispatcher.NotifyDispatcher
+	dispatchers map[string]*notifydispatcher.NotifyDispatcher
 
 	connStatusNotifier chan struct{}
 	notify             chan *pq.Notification
@@ -92,11 +93,11 @@ func RejectFrontendConnection(c net.Conn) {
 	_ = c.Close()
 }
 
-func (c FrontendConnection) String() string {
+func (c *FrontendConnection) String() string {
 	return c.remoteAddr
 }
 
-func NewFrontendConnection(c net.Conn, dispatcher *notifydispatcher.NotifyDispatcher, connStatusNotifier chan struct{}) *FrontendConnection {
+func NewFrontendConnection(c net.Conn, dispatchers map[string]*notifydispatcher.NotifyDispatcher, connStatusNotifier chan struct{}) *FrontendConnection {
 	io := &frontendConnectionIO{
 		c: c,
 		bufw: bufio.NewWriterSize(c, 128),
@@ -106,7 +107,8 @@ func NewFrontendConnection(c net.Conn, dispatcher *notifydispatcher.NotifyDispat
 		remoteAddr: c.RemoteAddr().String(),
 
 		stream:     fbcore.NewFrontendStream(io),
-		dispatcher: dispatcher,
+		dispatcher: nil,
+		dispatchers: dispatchers,
 
 		connStatusNotifier: connStatusNotifier,
 		notify:             make(chan *pq.Notification, 256),
@@ -171,6 +173,8 @@ func (c *FrontendConnection) auth(dbcfg VirtualDatabaseConfiguration, sm *fbprot
 	if !ok {
 		return authFailed("3D000", "database %q does not exist", dbname)
 	}
+
+	c.dispatcher = c.dispatchers[dbname]
 
 	switch authMethod {
 	case "trust":
