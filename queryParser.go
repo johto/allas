@@ -292,30 +292,27 @@ func isIdentifierContinuation(r rune) bool {
 }
 
 func readQuotedIdentifier(input []rune, token *queryParserToken) (rest []rune, err error) {
-	var identifier string
-	for {
-		if len(input) < 1 {
-			return nil, errQueryParserUnexpectedEOF
-		} else if input[0] == '"' {
-			input = input[1:]
-			break
-		} else if input[0] == '\\' {
-			if len(input) < 2 {
-				return nil, errQueryParserUnexpectedEOF
+	var sb strings.Builder
+	for i := 0; i < len(input); i++ {
+		char := input[i]
+
+		if char == '"' {
+			// Check if this is a double-quote (escape sequence)
+			if i+1 < len(input) && input[i+1] == '"' {
+				sb.WriteRune('"')
+				i++ // Skip the second quote
+				continue
 			}
-			if input[1] != '\\' && input[1] != '"' {
-				return nil, fmt.Errorf("unexpected escape character '%c'", input[1])
-			}
-			identifier += string(input[1])
-			input = input[2:]
-		} else {
-			identifier += string(input[0])
-			input = input[1:]
+			// Otherwise, it's the closing quote
+			token.payload = sb.String()
+			token.typ = tokIdentifier
+			return input[i+1:], nil
 		}
+
+		sb.WriteRune(char)
 	}
-	token.payload = identifier
-	token.typ = tokIdentifier
-	return input, nil
+
+	return nil, errQueryParserUnexpectedEOF
 }
 
 func readIdentifier(input []rune, token *queryParserToken) (rest []rune, err error) {
